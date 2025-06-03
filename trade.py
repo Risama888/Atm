@@ -15,7 +15,7 @@ from telegram.error import TelegramError
 
 # ==== Konfigurasi ====
 TELEGRAM_TOKEN = '7795073622:AAFEHjnKKNAUv2SEwkhLpvblMqolLNjSP48'
-CHAT_ID = 'YOUR_CHAT_ID'
+CHAT_ID = '-1002561504370'
 INTERVAL = '30m'
 SYMBOLS = ['BTCUSDT', 'ETHUSDT']
 EMA_PERIOD = 200
