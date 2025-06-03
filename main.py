@@ -1,13 +1,13 @@
 import requests
 import pandas as pd
 import numpy as np
-from ta.trend import EMAIndicator, SuperTrend, IchimokuIndicator
 import time
-import telegram
 import logging
+import telegram
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import io
+from ta.trend import EMAIndicator
 
 # === KONFIGURASI ===
 TELEGRAM_TOKEN = '7795073622:AAFEHjnKKNAUv2SEwkhLpvblMqolLNjSP48'
@@ -44,7 +44,7 @@ def send_chart_telegram(df, symbol, signal):
 
     title = f"{symbol} - Signal: {signal}"
 
-    fig, axlist = mpf.plot(
+    fig, _ = mpf.plot(
         df_plot,
         type='candle',
         style='charles',
@@ -78,18 +78,49 @@ def get_klines(symbol, interval='1h', limit=500):
     df = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
     return df
 
+# === INDIKATOR ===
 def apply_indicators(df):
-    supertrend = SuperTrend(high=df['high'], low=df['low'], close=df['close'], window=10, multiplier=3.0)
-    df['supertrend'] = supertrend.super_trend()
-    df['supertrend_direction'] = supertrend.super_trend_direction()
-
-    ichimoku = IchimokuIndicator(high=df['high'], low=df['low'], window1=9, window2=26, window3=52)
-    df['tenkan_sen'] = ichimoku.ichimoku_conversion_line()
-    df['kijun_sen'] = ichimoku.ichimoku_base_line()
-
     df['ema200'] = EMAIndicator(close=df['close'], window=200).ema_indicator()
+
+    # === Supertrend ===
+    period = 10
+    multiplier = 3.0
+    hl2 = (df['high'] + df['low']) / 2
+    df['atr'] = df['high'].rolling(period).max() - df['low'].rolling(period).min()
+    df['upperband'] = hl2 + (multiplier * df['atr'])
+    df['lowerband'] = hl2 - (multiplier * df['atr'])
+
+    supertrend = []
+    direction = []
+
+    for i in range(len(df)):
+        if i == 0:
+            supertrend.append(hl2.iloc[i])
+            direction.append(1)
+        else:
+            if df['close'].iloc[i] > df['upperband'].iloc[i - 1]:
+                direction.append(1)
+            elif df['close'].iloc[i] < df['lowerband'].iloc[i - 1]:
+                direction.append(-1)
+            else:
+                direction.append(direction[-1])
+            supertrend.append(df['lowerband'].iloc[i] if direction[-1] == 1 else df['upperband'].iloc[i])
+
+    df['supertrend'] = supertrend
+    df['supertrend_direction'] = direction
+
+    # === Ichimoku ===
+    nine_high = df['high'].rolling(window=9).max()
+    nine_low = df['low'].rolling(window=9).min()
+    df['tenkan_sen'] = (nine_high + nine_low) / 2
+
+    twenty_six_high = df['high'].rolling(window=26).max()
+    twenty_six_low = df['low'].rolling(window=26).min()
+    df['kijun_sen'] = (twenty_six_high + twenty_six_low) / 2
+
     return df
 
+# === SINYAL ===
 def generate_signal(df):
     row = df.iloc[-1]
     trend = 'uptrend' if row['close'] > row['ema200'] else 'downtrend'
@@ -110,14 +141,12 @@ def manage_positions(symbol, price, signal, df):
         pos_type = positions[symbol]['type']
         current_tp = positions[symbol].get('tp_reached', 0)
 
-        # Sinyal lawan
         if (pos_type == 'BUY' and signal == 'SELL') or (pos_type == 'SELL' and signal == 'BUY'):
             send_telegram(f"🔄 CLOSE {pos_type} {symbol} at {price:.2f} (opposite signal)")
             del positions[symbol]
             manage_positions(symbol, price, signal, df)
             return
 
-        # TP dan SL
         for i in range(current_tp, len(TP_LEVELS)):
             tp = TP_LEVELS[i]
             level = i + 1
@@ -176,4 +205,8 @@ def main():
                 print(f"{symbol}: {signal} at {price:.2f}")
             except Exception as e:
                 logging.error(f"Error on {symbol}: {e}")
-        time.sleep(30)  # 5 menit
+        time.sleep(300)  # Cek setiap 5 menit
+
+# === JALANKAN ===
+if __name__ == '__main__':
+    main()
