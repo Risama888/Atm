@@ -12,6 +12,7 @@ import mplfinance as mpf
 import io
 from telegram import Bot
 from telegram.error import TelegramError
+import ta  # ← Tambahan import ta
 
 # ==== Konfigurasi ====
 TELEGRAM_TOKEN = '7795073622:AAFEHjnKKNAUv2SEwkhLpvblMqolLNjSP48'
